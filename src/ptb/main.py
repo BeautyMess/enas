@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -25,6 +26,9 @@ from src.ptb.ptb_enas_controller import PTBEnasController
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
+#用特殊的 DEFINE_类型 格式获取模型的初始参数
+#DEFINE_类型("变量名",变量初始值,"变量的描述")
+#这种定义的格式类似GFLAGs
 DEFINE_boolean("reset_output_dir", False, "Delete output_dir if exists.")
 DEFINE_string("data_path", "", "")
 DEFINE_string("output_dir", "", "")
@@ -89,7 +93,7 @@ DEFINE_integer("num_epochs", 300, "")
 DEFINE_integer("log_every", 50, "How many steps to log")
 DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")
 
-
+#获取模型的参数
 def get_ops(x_train, x_valid, x_test):
   """Create relevant models."""
 
@@ -103,6 +107,7 @@ def get_ops(x_train, x_valid, x_test):
       assert not FLAGS.controller_training, (
         "with --child_fixed_arc, cannot train controller")
 
+    #生成子模型？该函数来自于同目录下的ptb_enas_child.py文件
     child_model = PTBEnasChild(
       x_train,
       x_valid,
@@ -140,6 +145,7 @@ def get_ops(x_train, x_valid, x_test):
       name="ptb_enas_model")
 
     if FLAGS.child_fixed_arc is None:
+      #生成控制器？PTBEnasController函数来源于同目录下ptb.ptb_enas_controller.py文件
       controller_model = PTBEnasController(
         rhn_depth=FLAGS.child_rhn_depth,
         lstm_size=100,
@@ -204,11 +210,14 @@ def get_ops(x_train, x_valid, x_test):
 
   return ops
 
-
+#训练函数
 def train(mode="train"):
+  #mode只能是train或者eval，否则报错，但是eval是什么模式
   assert mode in ["train", "eval"], "Unknown mode '{0}'".format(mode)
 
+  #打开数据文件
   with open(FLAGS.data_path) as finp:
+    #使用pickle序列化读入数据
     x_train, x_valid, x_test, _, _ = pickle.load(finp)
     print("-" * 80)
     print("train_size: {0}".format(np.size(x_train)))
@@ -218,11 +227,11 @@ def train(mode="train"):
   g = tf.Graph()
   with g.as_default():
     ops = get_ops(x_train, x_valid, x_test)
-    child_ops = ops["child"]
-    controller_ops = ops["controller"]
+    child_ops = ops["child"]  #ops和child_ops都是字典类型
+    controller_ops = ops["controller"]  #这个操作同上
 
     if FLAGS.child_optim_moving_average is None or mode == "eval":
-      saver = tf.train.Saver(max_to_keep=10)
+      saver = tf.train.Saver(max_to_keep=10) #saver用来存储训练中生成的模型
     else:
       saver = child_ops["optimizer"].swapping_saver(max_to_keep=10)
     checkpoint_saver_hook = tf.train.CheckpointSaverHook(
