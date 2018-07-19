@@ -215,7 +215,7 @@ def train(mode="train"):
   #mode只能是train或者eval，否则报错，但是eval是什么模式
   assert mode in ["train", "eval"], "Unknown mode '{0}'".format(mode)
 
-  #打开数据文件
+  #读数据
   with open(FLAGS.data_path) as finp:
     #使用pickle序列化读入数据
     x_train, x_valid, x_test, _, _ = pickle.load(finp)
@@ -225,32 +225,38 @@ def train(mode="train"):
     print(" test_size: {0}".format(np.size(x_test)))
 
   g = tf.Graph()
-  with g.as_default():
+  #根据数据来设置模型
+  with g.as_default():	#设置图g为默认图
     ops = get_ops(x_train, x_valid, x_test)
     child_ops = ops["child"]  #ops和child_ops都是字典类型
     controller_ops = ops["controller"]  #这个操作同上
 
     if FLAGS.child_optim_moving_average is None or mode == "eval":
+	  #使用moving average为10的滑动平均保存模型
       saver = tf.train.Saver(max_to_keep=10) #saver用来存储训练中生成的模型
     else:
       saver = child_ops["optimizer"].swapping_saver(max_to_keep=10)
     checkpoint_saver_hook = tf.train.CheckpointSaverHook(
       FLAGS.output_dir, save_steps=ops["num_train_batches"], saver=saver)
 
-    hooks = [checkpoint_saver_hook]
+    hooks = [checkpoint_saver_hook]	#hooks里面记录了一些与训练有关的参数
+	                                #比如迭代多少次保存一个副本
     if FLAGS.child_sync_replicas:
       sync_replicas_hook = child_ops["optimizer"].make_session_run_hook(True)
       hooks.append(sync_replicas_hook)
     if FLAGS.controller_training and FLAGS.controller_sync_replicas:
       hooks.append(controller_ops["optimizer"].make_session_run_hook(True))
 
+	#貌似从这开始训练
     print("-" * 80)
     print("Starting session")
+	#SingularMonitoredSession应该跟分布式训练有关
     with tf.train.SingularMonitoredSession(
       hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
         start_time = time.time()
 
-        if mode == "eval":
+        if mode == "eval":    #如果是eval模式，执行完退出
+		  #child_ops["valid_reset"]=child_model.valid_reset，所以需要弄懂child_model这个对象
           sess.run(child_ops["valid_reset"])
           ops["eval_func"](sess, "valid", verbose=True)
           sess.run(child_ops["test_reset"])
@@ -260,7 +266,8 @@ def train(mode="train"):
         num_batches = 0
         total_tr_ppl = 0
         best_valid_ppl = 67.00
-        while True:
+        #外层循环
+		while True:
           run_ops = [
             child_ops["loss"],
             child_ops["lr"],
@@ -279,6 +286,8 @@ def train(mode="train"):
             actual_step = global_step
           epoch = actual_step // ops["num_train_batches"]
           curr_time = time.time()
+		  
+		  #输出测试参数，这里输出了一次时间
           if global_step % FLAGS.log_every == 0:
             log_string = ""
             log_string += "epoch={:<6d}".format(epoch)
@@ -295,12 +304,15 @@ def train(mode="train"):
           if (FLAGS.child_reset_train_states is not None and
               np.random.uniform(0, 1) < FLAGS.child_reset_train_states):
             print("reset train states")
-            sess.run([
+            
+			#这边可能进行了一次训练
+			sess.run([
               child_ops["train_reset"],
               child_ops["valid_reset"],
               child_ops["test_reset"],
             ])
 
+		  #eval_every表示的应该是每多少个batch进行一次评估（eval）
           if actual_step % ops["eval_every"] == 0:
             sess.run([
               child_ops["train_reset"],
@@ -315,6 +327,8 @@ def train(mode="train"):
                 child_ops["test_reset"],
               ])
               print("Epoch {}: Training controller".format(epoch))
+			  
+			  #训练控制器
               for ct_step in xrange(FLAGS.controller_train_steps *
                                     FLAGS.controller_num_aggregate):
                 run_ops = [
@@ -327,7 +341,8 @@ def train(mode="train"):
                   controller_ops["train_op"],
                 ]
                 loss, entropy, lr, gn, rw, bl, _ = sess.run(run_ops)
-                controller_step = sess.run(controller_ops["train_step"])
+                #对控制器进行训练sess.run(controller_model.train_step)
+				controller_step = sess.run(controller_ops["train_step"])
 
                 if ct_step % FLAGS.log_every == 0:
                   curr_time = time.time()
@@ -344,10 +359,10 @@ def train(mode="train"):
                   print(log_string)
 
               print("Here are 10 architectures")
-              for _ in xrange(10):
+              for _ in xrange(10): #循环十次
                 arc, rw = sess.run([
-                  controller_ops["sample_arc"],
-                  controller_ops["reward"],
+                  controller_ops["sample_arc"],	#sample_arc来自于controller_model
+                  controller_ops["reward"],     #reward来自于controller_model
                 ])
                 print("{} rw={:<.3f}".format(np.reshape(arc, [-1]), rw))
 
@@ -357,8 +372,10 @@ def train(mode="train"):
               child_ops["test_reset"],
             ])
             print("Epoch {}: Eval".format(epoch))
+			#计算验证集上的ppl
             valid_ppl = ops["eval_func"](sess, "valid")
-            if valid_ppl < best_valid_ppl:
+            #如果得到了更好的模型结构，那就更新
+			if valid_ppl < best_valid_ppl:
               best_valid_ppl = valid_ppl
               sess.run(child_ops["test_reset"])
               ops["eval_func"](sess, "test", verbose=True)
@@ -373,6 +390,8 @@ def train(mode="train"):
 
             print("-" * 80)
 
+			
+		  #如果达到要求的epoch数量，就break
           if epoch >= FLAGS.num_epochs:
             ops["eval_func"](sess, "test", verbose=True)
             break
