@@ -19,10 +19,10 @@ from src.ptb.ptb_ops import layer_norm
 
 class PTBEnasChild(object):
   def __init__(self,
-               x_train,
+               x_train,        #x_train,x_valid,x_test应该是从数据集中读取的数据
                x_valid,
                x_test,
-               num_funcs=4,
+               num_funcs=4,    #大概是该控制器使用四种激活函数
                rnn_l2_reg=None,
                rnn_slowness_reg=None,
                rhn_depth=2,
@@ -64,7 +64,8 @@ class PTBEnasChild(object):
     """
     print("-" * 80)
     print("Build model {}".format(name))
-
+    
+	#初始化赋值阶段
     self.num_funcs = num_funcs
     self.rnn_l2_reg = rnn_l2_reg
     self.rnn_slowness_reg = rnn_slowness_reg
@@ -133,6 +134,8 @@ class PTBEnasChild(object):
 
     self.x_valid_raw = x_valid
 
+  #大概是测试函数
+  #eval_set可能取值test或者valid，表明是测试还是验证
   def eval_once(self, sess, eval_set, feed_dict=None, verbose=False):
     """Expects self.acc and self.global_step to be defined.
 
@@ -146,6 +149,7 @@ class PTBEnasChild(object):
     global_step = sess.run(self.global_step)
     print("Eval at {}".format(global_step))
    
+    #根据具体是验证还是测试，确定模型的参数
     if eval_set == "valid":
       assert self.valid_loss is not None, "TF op self.valid_loss is not defined."
       num_batches = self.num_valid_batches
@@ -163,10 +167,15 @@ class PTBEnasChild(object):
     else:
       raise ValueError("Unknown eval_set '{}'".format(eval_set))
 
+	  
+	#reset_op=self.test_reset or valid_reset
+	#self.test_reset = self._model(self.x_test, False, True)
+	#这个会话可能是为了建立模型
     sess.run(reset_op)
-    total_loss = 0
+    
+	total_loss = 0
     for batch_id in range(num_batches):
-      curr_loss = sess.run(loss_op, feed_dict=feed_dict)
+      curr_loss = sess.run(loss_op, feed_dict=feed_dict)	#计算损失
       total_loss += curr_loss  # np.minimum(curr_loss, 10.0 * bptt_steps * batch_size)
       ppl_sofar = np.exp(total_loss / (bptt_steps * batch_size * (batch_id + 1)))
       if verbose and (batch_id + 1) % 1000 == 0:
@@ -186,6 +195,7 @@ class PTBEnasChild(object):
     all_h, self.train_reset = self._model(self.x_train, True, False)
     log_probs = self._get_log_probs(
       all_h, self.y_train, batch_size=self.batch_size, is_training=True)
+	#损失的计算  
     self.loss = tf.reduce_sum(log_probs) / tf.to_float(self.batch_size)
     self.train_ppl = tf.exp(tf.reduce_mean(log_probs))
 
