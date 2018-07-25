@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -67,6 +68,8 @@ class PTBEnasController(object):
     self._build_sampler()
 
   def _create_params(self):
+	#初始化参数
+	#使用生成均匀分布的初始化器
     initializer = tf.random_uniform_initializer(minval=-0.1, maxval=0.1)
     with tf.variable_scope(self.name, initializer=initializer):
       with tf.variable_scope("lstm"):
@@ -101,6 +104,8 @@ class PTBEnasController(object):
     # sampler ops
     inputs = self.g_emb
     prev_c, prev_h = [], []
+	#prev_c=[0,0,0...,0],总共有self.lstm_num_layers*self.lstm_size个0
+	#prev_h一样
     for _ in xrange(self.lstm_num_layers):
       prev_c.append(tf.zeros([1, self.lstm_size], dtype=tf.float32))
       prev_h.append(tf.zeros([1, self.lstm_size], dtype=tf.float32))
@@ -173,13 +178,20 @@ class PTBEnasController(object):
 
     self.all_h = all_h
 
+  #这个函数构建了reward的计算，生成了训练的操作
   def build_trainer(self, child_model):
     # actor
+	#tf.to_float的作用是将tensor转化为float
+	#controller的损失来自于子模型的rl_loss
     self.valid_loss = tf.to_float(child_model.rl_loss)
+	#使用tf.stop_gradient阻挡valid_loss的BP
     self.valid_loss = tf.stop_gradient(self.valid_loss)
+	#计算PPL=e^valid_loss
     self.valid_ppl = tf.exp(self.valid_loss)
+	#reward=80/ppl
     self.reward = 80.0 / self.valid_ppl
-
+	
+	#并不知道entropy_weight是什么
     if self.entropy_weight is not None:
       self.reward += self.entropy_weight * self.sample_entropy
 
@@ -189,13 +201,19 @@ class PTBEnasController(object):
     baseline_update = tf.assign_sub(
       self.baseline, (1 - self.bl_dec) * (self.baseline - self.reward))
 
+	#先计算baseline_update再计算reward  
     with tf.control_dependencies([baseline_update]):
       self.reward = tf.identity(self.reward)
+	  
+	#损失函数的计算：loss=sample_log_probs*(reward-baseline)
     self.loss = self.sample_log_probs * (self.reward - self.baseline)
 
-    self.train_step = tf.Variable(
+    #创建变量train_step，这个变量表示什么
+	self.train_step = tf.Variable(
         0, dtype=tf.int32, trainable=False, name="train_step")
-    tf_variables = [var
+    
+	#tf_variables存储了所有可训练参数，这些参数满足一个条件，它们必须以self.name开头，self.name默认是"controller"
+	tf_variables = [var
         for var in tf.trainable_variables() if var.name.startswith(self.name)]
 
     self.train_op, self.lr, self.grad_norm, self.optimizer = get_train_ops(
