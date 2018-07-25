@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*
+#实现一些通用的功能，比如通过tf.aap.flags.FLAGS来获取命令行参数。计算模型的总参数量
+
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -9,7 +12,9 @@ import tensorflow as tf
 
 user_flags = []
 
-
+"""
+实现了string、integer、float、boolean类型参数的获取
+"""
 def DEFINE_string(name, default_value, doc_string):
   tf.app.flags.DEFINE_string(name, default_value, doc_string)
   global user_flags
@@ -34,6 +39,7 @@ def DEFINE_boolean(name, default_value, doc_string):
   user_flags.append(name)
 
 
+#打印命令行参数  
 def print_user_flags(line_limit=80):
   print("-" * 80)
 
@@ -71,6 +77,8 @@ class Logger(object):
     self.log.flush()
 
 
+
+#这个函数用来计算模型的总参数量	
 def count_model_params(tf_variables):
   """
   Args:
@@ -114,7 +122,9 @@ def get_train_ops(
     clip_mode: "global", "norm", or None.
     moving_average: store the moving average of parameters
   """
-
+  #并不知道clip_mode是什么意思
+  
+  #L2正则操作，loss=loss+L2系数*所有参数的平方和，l2_reg就是l2系数
   if l2_reg > 0:
     l2_losses = []
     for var in tf_variables:
@@ -122,21 +132,24 @@ def get_train_ops(
     l2_loss = tf.add_n(l2_losses)
     loss += l2_reg * l2_loss
 
+  #grads为各个可训练参数的梯度值，grads_norm为梯度值向量的模，类似梯度的模
   grads = tf.gradients(loss, tf_variables)
   grad_norm = tf.global_norm(grads)
 
+  
   grad_norms = {}
-  for v, g in zip(tf_variables, grads):
-    if v is None or g is None:
+  for v, g in zip(tf_variables, grads):   #这边的zip操作实现的操作是将[var1,var2,...varn]变成[[var1,grad1],[var2,grad2],...[varn,gradn]]
+    #g应该指的是graph，v暂时不知道
+	if v is None or g is None:
       continue
-    if isinstance(g, tf.IndexedSlices):
+    if isinstance(g, tf.IndexedSlices):  #如果g是tf.IndexedSlices的实例
       grad_norms[v.name] = tf.sqrt(tf.reduce_sum(g.values ** 2))
     else:
       grad_norms[v.name] = tf.sqrt(tf.reduce_sum(g ** 2))
 
   if clip_mode is not None:
     assert grad_bound is not None, "Need grad_bound to clip gradients."
-    if clip_mode == "global":
+    if clip_mode == "global":      #如果clip_mode=="global"，表示要进行缩放梯度的处理，以避免梯度过大，grad_bound就是我们控制梯度的范围
       grads, _ = tf.clip_by_global_norm(grads, grad_bound)
     elif clip_mode == "norm":
       clipped = []
@@ -159,14 +172,17 @@ def get_train_ops(
     assert num_train_batches is not None, ("Need num_train_batches to use"
                                            " lr_cosine")
 
-    curr_epoch = train_step // num_train_batches
+    #train_step和num_train_batches的意思都还需要搞懂
+	curr_epoch = train_step // num_train_batches
 
+	#last_reset不知道什么作用，但是是一个不能训练的参数
     last_reset = tf.Variable(0, dtype=tf.int32, trainable=False,
                              name="last_reset")
     T_i = tf.Variable(lr_T_0, dtype=tf.int32, trainable=False, name="T_i")
     T_curr = curr_epoch - last_reset
 
-    def _update():
+    #lr更新函数
+	def _update():
       update_last_reset = tf.assign(last_reset, curr_epoch, use_locking=True)
       update_T_i = tf.assign(T_i, T_i * lr_T_mul, use_locking=True)
       with tf.control_dependencies([update_last_reset, update_T_i]):
@@ -174,6 +190,7 @@ def get_train_ops(
         lr = lr_min + 0.5 * (lr_max - lr_min) * (1.0 + tf.cos(rate))
       return lr
 
+	#lr更新函数
     def _no_update():
       rate = tf.to_float(T_curr) / tf.to_float(T_i) * 3.1415926
       lr = lr_min + 0.5 * (lr_max - lr_min) * (1.0 + tf.cos(rate))
@@ -181,13 +198,20 @@ def get_train_ops(
 
     learning_rate = tf.cond(
       tf.greater_equal(T_curr, T_i), _update, _no_update)
+  
   else:
-    learning_rate = tf.train.exponential_decay(
+    #设置学习率的指数衰减
+	#lr_init为初始学习率，衰减计算的起点由max(0,train_step-lr_dec_start)决定，lr_dec_every表示每lr_dec_every轮训练衰减一次学习率
+	#lr_dec_rate为衰减比率
+	learning_rate = tf.train.exponential_decay(
       lr_init, tf.maximum(train_step - lr_dec_start, 0), lr_dec_every,
       lr_dec_rate, staircase=True)
+	  
+	#学习率不得小于lr_dec_min
     if lr_dec_min is not None:
       learning_rate = tf.maximum(learning_rate, lr_dec_min)
 
+  #这个真不知道是啥
   if lr_warmup_val is not None:
     learning_rate = tf.cond(tf.less(train_step, lr_warmup_steps),
                             lambda: lr_warmup_val, lambda: learning_rate)
@@ -209,6 +233,9 @@ def get_train_ops(
   #   learning_rate = tf.Print(learning_rate, [g_1, g_2, tf.sqrt(g_1 / g_2)],
   #                            message="g_1, g_2, g_1/g_2: ", summarize=5)
 
+  
+  
+  #这边设置梯度下降算法，可选的有momentum、sgd、adam
   if optim_algo == "momentum":
     opt = tf.train.MomentumOptimizer(
       learning_rate, 0.9, use_locking=True, use_nesterov=True)
@@ -220,6 +247,8 @@ def get_train_ops(
   else:
     raise ValueError("Unknown optim_algo {}".format(optim_algo))
 
+  
+  #好像跟同步训练有关
   if sync_replicas:
     assert num_aggregate is not None, "Need num_aggregate to sync."
     assert num_replicas is not None, "Need num_replicas to sync."
