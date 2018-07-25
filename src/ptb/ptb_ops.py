@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*
+#layer_norm()函数，对输入数据做layer_norm操作
+#batch_norm()函数，对输入数据做batch_norm操作
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.training import moving_averages
