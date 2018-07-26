@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -404,9 +405,27 @@ class GeneralChild(Model):
                              data_format=self.data_format)
           out = batch_norm(out, is_training, data_format=self.data_format)
       elif count == 4:
-        pass
+        """为了修正out局部变量错误的尝试"""
+        with tf.variable_scope("pool"):
+          if self.data_format == "NHWC":
+            actual_data_format = "channels_last"
+          elif self.data_format == "NCHW":
+            actual_data_format = "channels_first"
+          out = tf.layers.average_pooling2d(
+            inputs, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
+		    """为了修正out局部变量错误的尝试
+        pass"""
       elif count == 5:
-        pass
+        """为了修正out局部变量错误的尝试"""
+        with tf.variable_scope("pool"):
+          if self.data_format == "NHWC":
+            actual_data_format = "channels_last"
+          elif self.data_format == "NCHW":
+            actual_data_format = "channels_first"
+          out = tf.layers.max_pooling2d(
+            inputs, [3, 3], [1, 1], "SAME", data_format=actual_data_format)
+        """
+        pass"""
       else:
         raise ValueError("Unknown operation number '{0}'".format(count))
     else:
