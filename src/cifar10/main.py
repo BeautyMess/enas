@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -29,66 +30,72 @@ from src.cifar10.micro_child import MicroChild
 flags = tf.app.flags
 FLAGS = flags.FLAGS
 
-DEFINE_boolean("reset_output_dir", False, "Delete output_dir if exists.")
-DEFINE_string("data_path", "", "")
-DEFINE_string("output_dir", "", "")
-DEFINE_string("data_format", "NHWC", "'NHWC' or 'NCWH'")
-DEFINE_string("search_for", None, "Must be [macro|micro]")
+DEFINE_boolean("reset_output_dir", False, "Delete output_dir if exists.")       #如果输出存在，删除它，并且新建输出目录
+DEFINE_string("data_path", "", "")                                              #数据文件存储路径
+DEFINE_string("output_dir", "", "")                                             #输出目录
+DEFINE_string("data_format", "NHWC", "'NHWC' or 'NCWH'")                        #数据的格式，NHWC或NCWH
+DEFINE_string("search_for", None, "Must be [macro|micro]")                      #search方式，macro或者micro
 
-DEFINE_integer("batch_size", 32, "")
+DEFINE_integer("batch_size", 32, "")                                            #batch大小
 
-DEFINE_integer("num_epochs", 300, "")
-DEFINE_integer("child_lr_dec_every", 100, "")
-DEFINE_integer("child_num_layers", 5, "")
-DEFINE_integer("child_num_cells", 5, "")
-DEFINE_integer("child_filter_size", 5, "")
-DEFINE_integer("child_out_filters", 48, "")
-DEFINE_integer("child_out_filters_scale", 1, "")
-DEFINE_integer("child_num_branches", 4, "")
-DEFINE_integer("child_num_aggregate", None, "")
-DEFINE_integer("child_num_replicas", 1, "")
-DEFINE_integer("child_block_size", 3, "")
-DEFINE_integer("child_lr_T_0", None, "for lr schedule")
-DEFINE_integer("child_lr_T_mul", None, "for lr schedule")
-DEFINE_integer("child_cutout_size", None, "CutOut size")
-DEFINE_float("child_grad_bound", 5.0, "Gradient clipping")
-DEFINE_float("child_lr", 0.1, "")
-DEFINE_float("child_lr_dec_rate", 0.1, "")
-DEFINE_float("child_keep_prob", 0.5, "")
-DEFINE_float("child_drop_path_keep_prob", 1.0, "minimum drop_path_keep_prob")
-DEFINE_float("child_l2_reg", 1e-4, "")
-DEFINE_float("child_lr_max", None, "for lr schedule")
-DEFINE_float("child_lr_min", None, "for lr schedule")
-DEFINE_string("child_skip_pattern", None, "Must be ['dense', None]")
-DEFINE_string("child_fixed_arc", None, "")
-DEFINE_boolean("child_use_aux_heads", False, "Should we use an aux head")
-DEFINE_boolean("child_sync_replicas", False, "To sync or not to sync.")
-DEFINE_boolean("child_lr_cosine", False, "Use cosine lr schedule")
+DEFINE_integer("num_epochs", 300, "")                                           #epoch数量
 
-DEFINE_float("controller_lr", 1e-3, "")
-DEFINE_float("controller_lr_dec_rate", 1.0, "")
-DEFINE_float("controller_keep_prob", 0.5, "")
-DEFINE_float("controller_l2_reg", 0.0, "")
-DEFINE_float("controller_bl_dec", 0.99, "")
-DEFINE_float("controller_tanh_constant", None, "")
-DEFINE_float("controller_op_tanh_reduce", 1.0, "")
-DEFINE_float("controller_temperature", None, "")
-DEFINE_float("controller_entropy_weight", None, "")
-DEFINE_float("controller_skip_target", 0.8, "")
-DEFINE_float("controller_skip_weight", 0.0, "")
-DEFINE_integer("controller_num_aggregate", 1, "")
-DEFINE_integer("controller_num_replicas", 1, "")
-DEFINE_integer("controller_train_steps", 50, "")
-DEFINE_integer("controller_forwards_limit", 2, "")
+"""子模型的参数"""
+DEFINE_integer("child_lr_dec_every", 100, "")                                   #每多少batch学习衰减一次
+DEFINE_integer("child_num_layers", 5, "")                                       #网络的层数，即论文中的节点数
+DEFINE_integer("child_num_cells", 5, "")                                        #micro方法的参数，大概是cell中节点的数量
+DEFINE_integer("child_filter_size", 5, "")                                      #
+DEFINE_integer("child_out_filters", 48, "")                                     #
+DEFINE_integer("child_out_filters_scale", 1, "")                                #
+DEFINE_integer("child_num_branches", 4, "")                                     #
+DEFINE_integer("child_num_aggregate", None, "")                                 #
+DEFINE_integer("child_num_replicas", 1, "")                                     #跟并行有关
+DEFINE_integer("child_block_size", 3, "")                                       #
+DEFINE_integer("child_lr_T_0", None, "for lr schedule")                         #学习率相关
+DEFINE_integer("child_lr_T_mul", None, "for lr schedule")                       #学习率相关
+DEFINE_integer("child_cutout_size", None, "CutOut size")                        #coutout是一个2017年提出的数据增强方法
+DEFINE_float("child_grad_bound", 5.0, "Gradient clipping")                      #梯度幅度限制
+DEFINE_float("child_lr", 0.1, "")                                               #学习率
+DEFINE_float("child_lr_dec_rate", 0.1, "")                                      #学习率的衰减率
+DEFINE_float("child_keep_prob", 0.5, "")                                        #
+DEFINE_float("child_drop_path_keep_prob", 1.0, "minimum drop_path_keep_prob")   #
+DEFINE_float("child_l2_reg", 1e-4, "")                                          #L2正则
+DEFINE_float("child_lr_max", None, "for lr schedule")                           #学习率相关
+DEFINE_float("child_lr_min", None, "for lr schedule")                           #学习率相关
+DEFINE_string("child_skip_pattern", None, "Must be ['dense', None]")            #子模型的模式，dense或者none，暂时不知道这两个参数的意义
+DEFINE_string("child_fixed_arc", None, "")                                      #固定模型的标识符
+DEFINE_boolean("child_use_aux_heads", False, "Should we use an aux head")       #
+DEFINE_boolean("child_sync_replicas", False, "To sync or not to sync.")         #
+DEFINE_boolean("child_lr_cosine", False, "Use cosine lr schedule")              #学习率相关
+"""子模型的参数"""
+
+
+"""controller的参数"""
+DEFINE_float("controller_lr", 1e-3, "")                                         #学习率
+DEFINE_float("controller_lr_dec_rate", 1.0, "")                                 #
+DEFINE_float("controller_keep_prob", 0.5, "")                                   #
+DEFINE_float("controller_l2_reg", 0.0, "")                                      #
+DEFINE_float("controller_bl_dec", 0.99, "")                                     #
+DEFINE_float("controller_tanh_constant", None, "")                              #
+DEFINE_float("controller_op_tanh_reduce", 1.0, "")                              #
+DEFINE_float("controller_temperature", None, "")                                #
+DEFINE_float("controller_entropy_weight", None, "")                             #
+DEFINE_float("controller_skip_target", 0.8, "")                                 #
+DEFINE_float("controller_skip_weight", 0.0, "")                                 #
+DEFINE_integer("controller_num_aggregate", 1, "")                               #
+DEFINE_integer("controller_num_replicas", 1, "")                                #
+DEFINE_integer("controller_train_steps", 50, "")                                #
+DEFINE_integer("controller_forwards_limit", 2, "")                              #
 DEFINE_integer("controller_train_every", 2,
-               "train the controller after this number of epochs")
-DEFINE_boolean("controller_search_whole_channels", False, "")
-DEFINE_boolean("controller_sync_replicas", False, "To sync or not to sync.")
-DEFINE_boolean("controller_training", True, "")
-DEFINE_boolean("controller_use_critic", False, "")
+               "train the controller after this number of epochs")              #
+DEFINE_boolean("controller_search_whole_channels", False, "")                   #
+DEFINE_boolean("controller_sync_replicas", False, "To sync or not to sync.")    #
+DEFINE_boolean("controller_training", True, "")                                 #
+DEFINE_boolean("controller_use_critic", False, "")                              #
+"""controller的参数"""
 
-DEFINE_integer("log_every", 50, "How many steps to log")
-DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")
+DEFINE_integer("log_every", 50, "How many steps to log")                        #多少step输出一次日志
+DEFINE_integer("eval_every_epochs", 1, "How many epochs to eval")               #多少epoch评估一次
 
 def get_ops(images, labels):
   """
@@ -98,7 +105,7 @@ def get_ops(images, labels):
   """
 
   assert FLAGS.search_for is not None, "Please specify --search_for"
-
+  #根据搜索方式的不同，生成不同的ControllerClass和ChildClass类
   if FLAGS.search_for == "micro":
     ControllerClass = MicroController
     ChildClass = MicroChild
@@ -140,6 +147,7 @@ def get_ops(images, labels):
     num_replicas=FLAGS.child_num_replicas,
   )
 
+  #如果固定架构就不生成controller类
   if FLAGS.child_fixed_arc is None:
     controller_model = ControllerClass(
       search_for=FLAGS.search_for,
@@ -168,8 +176,8 @@ def get_ops(images, labels):
       num_aggregate=FLAGS.controller_num_aggregate,
       num_replicas=FLAGS.controller_num_replicas)
 
-    child_model.connect_controller(controller_model)
-    controller_model.build_trainer(child_model)
+    child_model.connect_controller(controller_model)        #子模型与controller相连
+    controller_model.build_trainer(child_model)             #controller生成对子模型的训练器
 
     controller_ops = {
       "train_step": controller_model.train_step,
@@ -185,11 +193,13 @@ def get_ops(images, labels):
       "skip_rate": controller_model.skip_rate,
     }
   else:
+  #固定架构情况下，无需生成controller
     assert not FLAGS.controller_training, (
       "--child_fixed_arc is given, cannot train controller")
     child_model.connect_controller(None)
     controller_ops = None
 
+  #子模型的操作（op）
   child_ops = {
     "global_step": child_model.global_step,
     "loss": child_model.loss,
@@ -201,6 +211,7 @@ def get_ops(images, labels):
     "num_train_batches": child_model.num_train_batches,
   }
 
+  #总的操作
   ops = {
     "child": child_ops,
     "controller": controller_ops,
@@ -216,7 +227,7 @@ def train():
   if FLAGS.child_fixed_arc is None:
     images, labels = read_data(FLAGS.data_path)
   else:
-    images, labels = read_data(FLAGS.data_path, num_valids=0)
+    images, labels = read_data(FLAGS.data_path, num_valids=0)         #如果是固定架构，就不生成验证集
 
   g = tf.Graph()
   with g.as_default():
@@ -224,7 +235,7 @@ def train():
     child_ops = ops["child"]
     controller_ops = ops["controller"]
 
-    saver = tf.train.Saver(max_to_keep=2)
+    saver = tf.train.Saver(max_to_keep=2)                             #保存最近两次模型
     checkpoint_saver_hook = tf.train.CheckpointSaverHook(
       FLAGS.output_dir, save_steps=child_ops["num_train_batches"], saver=saver)
 
@@ -238,11 +249,13 @@ def train():
 
     print("-" * 80)
     print("Starting session")
-    config = tf.ConfigProto(allow_soft_placement=True)
+    config = tf.ConfigProto(allow_soft_placement=True)               #允许自动分配GPU
     with tf.train.SingularMonitoredSession(
-      config=config, hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:
+      config=config, hooks=hooks, checkpoint_dir=FLAGS.output_dir) as sess:  #在run过程中集成保存saver、checkpoint等操作
         start_time = time.time()
-        while True:
+		
+		#开始训练，执行操作
+		while True:
           run_ops = [
             child_ops["loss"],
             child_ops["lr"],
@@ -252,13 +265,15 @@ def train():
           ]
           loss, lr, gn, tr_acc, _ = sess.run(run_ops)
           global_step = sess.run(child_ops["global_step"])
-
+		  
           if FLAGS.child_sync_replicas:
             actual_step = global_step * FLAGS.num_aggregate
           else:
             actual_step = global_step
-          epoch = actual_step // ops["num_train_batches"]
+		  epoch = actual_step // ops["num_train_batches"]                 #num_train_batches应该表示一个epoch包含的step数量
           curr_time = time.time()
+		  
+		  #间隔log_every个step，输出一条信息
           if global_step % FLAGS.log_every == 0:
             log_string = ""
             log_string += "epoch={:<6d}".format(epoch)
@@ -271,8 +286,16 @@ def train():
             log_string += " mins={:<10.2f}".format(
                 float(curr_time - start_time) / 60)
             print(log_string)
-            
+          
+		  #间隔eval_every个step，
           if actual_step % ops["eval_every"] == 0:
+		    
+			"""
+			判断是否要训练controller
+			两个条件决定是否要训练controller
+			1)controller_training为真，即非固定架构情况下
+			2)每controller_train_every个step进行训练
+			"""
             if (FLAGS.controller_training and
                 epoch % FLAGS.controller_train_every == 0):
               print("Epoch {}: Training controller".format(epoch))
@@ -307,7 +330,8 @@ def train():
 
               print("Here are 10 architectures")
               for _ in range(10):
-                arc, acc = sess.run([
+                #生成十个模型
+				arc, acc = sess.run([
                   controller_ops["sample_arc"],
                   controller_ops["valid_acc"],
                 ])
@@ -334,10 +358,10 @@ def train():
 
           if epoch >= FLAGS.num_epochs:
             break
-
-
 def main(_):
   print("-" * 80)
+  
+  #判断输出目录是否存在，以及相应的操作
   if not os.path.isdir(FLAGS.output_dir):
     print("Path {} does not exist. Creating.".format(FLAGS.output_dir))
     os.makedirs(FLAGS.output_dir)
@@ -351,8 +375,8 @@ def main(_):
   print("Logging to {}".format(log_file))
   sys.stdout = Logger(log_file)
 
-  utils.print_user_flags()
-  train()
+  utils.print_user_flags()                       #打印参数信息
+  train()                                        #开始训练
 
 
 if __name__ == "__main__":
