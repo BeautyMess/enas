@@ -96,6 +96,7 @@ class GeneralChild(Model):
     pool_distance = self.num_layers // 3
     self.pool_layers = [pool_distance - 1, 2 * pool_distance - 1]
 
+  """获取通道数"""	
   def _get_C(self, x):
     """
     Args:
@@ -108,6 +109,7 @@ class GeneralChild(Model):
     else:
       raise ValueError("Unknown data_format '{0}'".format(self.data_format))
 
+  """获取图像的高和宽"""	
   def _get_HW(self, x):
     """
     Args:
@@ -115,6 +117,7 @@ class GeneralChild(Model):
     """
     return x.get_shape()[2].value
 
+  """根据不同的数据存储格式，返回stride格式"""	
   def _get_strides(self, stride):
     """
     Args:
@@ -127,7 +130,9 @@ class GeneralChild(Model):
     else:
       raise ValueError("Unknown data_format '{0}'".format(self.data_format))
 
-  def _factorized_reduction(self, x, out_filters, stride, is_training):
+	  
+  """一种信息无损伤的1*1卷积结构，好像是为了实现skip层"""	  
+  def _factorized_reduction(self, x, out_filters, stride, is_training):         #out_filters为卷积核数，即卷积后的特征图数量
     """Reduces the shape of x without information loss due to striding."""
     assert out_filters % 2 == 0, (
         "Need even number of filters when using this factorized reduction.")
@@ -177,7 +182,7 @@ class GeneralChild(Model):
 
     return final_path
 
-
+ """好像是重复实现了"""
   def _get_C(self, x):
     """
     Args:
@@ -190,6 +195,7 @@ class GeneralChild(Model):
     else:
       raise ValueError("Unknown data_format '{0}'".format(self.data_format))
 
+	  
   def _model(self, images, is_training, reuse=False):
     with tf.variable_scope(self.name, reuse=reuse):
       layers = []
