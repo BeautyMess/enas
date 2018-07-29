@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*
+#controller的类函数，包含参数的初始化，训练过程的实现，sampler的构建
 import sys
 import os
 import time
@@ -65,6 +67,7 @@ class ConvController(Controller):
     self._create_params()
     self._build_sampler()
 
+  """声明controller（LSTM）的参数"""
   def _create_params(self):
     with tf.variable_scope(self.name):
       with tf.variable_scope("lstm"):
@@ -85,7 +88,9 @@ class ConvController(Controller):
                                             self.num_blocks_per_branch])
       with tf.variable_scope("critic"):
         self.w_critic = tf.get_variable("w", [self.lstm_size, 1])
-
+  """声明controller（LSTM）的参数"""
+  
+  
   def _build_sampler(self):
     """Build the sampler ops and the log_prob ops."""
 
@@ -132,8 +137,9 @@ class ConvController(Controller):
     child_model.build_valid_rl()
     self.valid_acc = (tf.to_float(child_model.valid_shuffle_acc) /
                       tf.to_float(child_model.batch_size))
-    self.reward = self.valid_acc
+    self.reward = self.valid_acc                                      #controller的reward使用子模型在验证集上的准确率
 
+	#使用critic还是baseline方法
     if self.use_critic:
       # critic
       all_h = tf.concat(self.all_h, axis=0)
@@ -156,6 +162,7 @@ class ConvController(Controller):
         optim_algo="adam",
         sync_replicas=False)
     else:
+	  #使用baseline来减小方差
       # or baseline
       self.sample_log_probs = tf.reduce_sum(self.sample_log_probs)
       self.baseline = tf.Variable(0.0, dtype=tf.float32, trainable=False)
