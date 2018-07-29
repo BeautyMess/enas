@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*
 import sys
 import os
 import time
@@ -80,6 +81,7 @@ class GeneralController(Controller):
     self._create_params()
     self._build_sampler()
 
+  """构建参数，该函数同样也在controller.py中实现，但并未import"""
   def _create_params(self):
     initializer = tf.random_uniform_initializer(minval=-0.1, maxval=0.1)
     with tf.variable_scope(self.name, initializer=initializer):
@@ -123,6 +125,7 @@ class GeneralController(Controller):
         self.w_attn_2 = tf.get_variable("w_2", [self.lstm_size, self.lstm_size])
         self.v_attn = tf.get_variable("v", [self.lstm_size, 1])
 
+  """构建sampler，该函数同样也在controller.py中实现，但并未import"""
   def _build_sampler(self):
     """Build the sampler ops and the log_prob ops."""
 
@@ -267,6 +270,7 @@ class GeneralController(Controller):
     skip_penaltys = tf.stack(skip_penaltys)
     self.skip_penaltys = tf.reduce_mean(skip_penaltys)
 
+  """构建trainer，该函数同样也在controller.py中实现，但并未import"""
   def build_trainer(self, child_model):
     child_model.build_valid_rl()
     self.valid_acc = (tf.to_float(child_model.valid_shuffle_acc) /
