@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*
+#实现了一些对图像的常用操作，dropout、卷积、全连接、池化、BN和relu激活函数
+
 import numpy as np
 import tensorflow as tf
 from tensorflow.python.training import moving_averages
