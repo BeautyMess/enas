@@ -1,3 +1,5 @@
+# -*- coding: utf-8 -*
+#子模型的类文件，包含数据的处理，训练、验证和测试过程的构建
 import os
 import sys
 
@@ -69,10 +71,10 @@ class Model(object):
     print "Build data ops"
     with tf.device("/cpu:0"):
       # training data
-      self.num_train_examples = np.shape(images["train"])[0]
+      self.num_train_examples = np.shape(images["train"])[0]                  #self.num_train_examples=训练集样本的数量
       self.num_train_batches = (
-        self.num_train_examples + self.batch_size - 1) // self.batch_size
-      x_train, y_train = tf.train.shuffle_batch(
+        self.num_train_examples + self.batch_size - 1) // self.batch_size     #num_train_batches=训练的batch数
+      x_train, y_train = tf.train.shuffle_batch(                              #打乱batch的顺序
         [images["train"], labels["train"]],
         batch_size=self.batch_size,
         capacity=50000,
@@ -84,7 +86,8 @@ class Model(object):
       )
       self.lr_dec_every = lr_dec_every * self.num_train_batches
 
-      def _pre_process(x):
+	  """数据预处理，将40*40的图像随机grop为32*32，以及其他一些数据增强操作，如cutout"""
+      def _pre_process(x):                                                     
         x = tf.pad(x, [[4, 4], [4, 4], [0, 0]])
         x = tf.random_crop(x, [32, 32, 3], seed=self.seed)
         x = tf.image.random_flip_left_right(x, seed=self.seed)
@@ -102,6 +105,9 @@ class Model(object):
           x = tf.transpose(x, [2, 0, 1])
 
         return x
+	"""数据预处理，将40*40的图像随机grop为32*32，以及其他一些数据增强操作，如cutout"""
+	
+		
       self.x_train = tf.map_fn(_pre_process, x_train, back_prop=False)
       self.y_train = y_train
 
@@ -145,6 +151,8 @@ class Model(object):
     self.images = images
     self.labels = labels
 
+	
+  """评估函数，训练每进行到一定程度，进行一次评估"""	
   def eval_once(self, sess, eval_set, feed_dict=None, verbose=False):
     """Expects self.acc and self.global_step to be defined.
 
@@ -184,7 +192,10 @@ class Model(object):
       print ""
     print "{}_accuracy: {:<6.4f}".format(
       eval_set, float(total_acc) / total_exp)
+    """评估函数，训练每进行到一定程度，进行一次评估"""	
+	  
 
+  """构建模型的训练过程"""	  
   def _build_train(self):
     print "Build train graph"
     logits = self._model(self.x_train, True)
@@ -222,7 +233,9 @@ class Model(object):
       sync_replicas=self.sync_replicas,
       num_aggregate=self.num_aggregate,
       num_replicas=self.num_replicas)
-
+  """构建模型的训练过程"""	
+  
+ 
   def _build_valid(self):
     if self.x_valid is not None:
       print "-" * 80
