@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*
+#主要实现了controller的生成，包含controller的训练，sampler的实现
 import sys
 import os
 import time
@@ -11,7 +12,39 @@ from src.utils import get_train_ops
 from src.common_ops import stack_lstm
 
 from tensorflow.python.training import moving_averages
-
+"""
+#对于GeneralController参数的解释
+#
+#search_for="both",                  搜索方式，Micro或Macro
+#search_whole_channels=False,        未知
+#num_layers=4,                       未知
+#num_branches=6,                     未知
+#out_filters=48,                     卷积核数量，即feature map数量
+#lstm_size=32,                       LSTM输入的维度
+#lstm_num_layers=2,                  LSTM网络层数
+#lstm_keep_prob=1.0,                 未知
+#tanh_constant=None,                 使用tanh函数将变量映射到[-tanh_constant,tanh_constant]范围内
+#temperature=None,                   softmax的temperature参数
+#lr_init=1e-3,                       初始学习率
+#lr_dec_start=0,                     学习率衰减的起点
+#lr_dec_every=100,                   学习率衰减的频率
+#lr_dec_rate=0.9,                    学习率衰减的比率
+#l2_reg=0,                           L2正则
+#entropy_weight=None,                交叉熵权重
+#clip_mode=None,                     与tf.clip_by_global_norm函数相关
+#grad_bound=None,                    梯度的限制范围
+#use_critic=False,                   未知
+#bl_dec=0.999,                       未知
+#optim_algo="adam",                  优化算法
+#sync_replicas=False,                是否有并行
+#num_aggregate=None,                 未知
+#num_replicas=None,                  并行数量
+#skip_target=0.8,                    未知
+#skip_weight=0.5,                    未知
+#name="controller",                  命名：controller
+#*args,
+#**kwargs):
+"""
 class GeneralController(Controller):
   def __init__(self,
                search_for="both",
@@ -81,14 +114,16 @@ class GeneralController(Controller):
     self._create_params()
     self._build_sampler()
 
-  """构建参数，该函数同样也在controller.py中实现，但并未import"""
+  """构建参数函数，该函数在controller.py中重载"""
   def _create_params(self):
     initializer = tf.random_uniform_initializer(minval=-0.1, maxval=0.1)
     with tf.variable_scope(self.name, initializer=initializer):
       with tf.variable_scope("lstm"):
         self.w_lstm = []
+		#创建LSTM的层参数，命名空间格式为layer_0, layer_1...
         for layer_id in xrange(self.lstm_num_layers):
           with tf.variable_scope("layer_{}".format(layer_id)):
+			#np.shape(w)=[2 * self.lstm_size, 4 * self.lstm_size]
             w = tf.get_variable(
               "w", [2 * self.lstm_size, 4 * self.lstm_size])
             self.w_lstm.append(w)
@@ -104,6 +139,7 @@ class GeneralController(Controller):
       else:
         self.w_emb = {"start": [], "count": []}
         with tf.variable_scope("emb"):
+		  #在此添加num_branches的解释
           for branch_id in xrange(self.num_branches):
             with tf.variable_scope("branch_{}".format(branch_id)):
               self.w_emb["start"].append(tf.get_variable(
@@ -125,7 +161,7 @@ class GeneralController(Controller):
         self.w_attn_2 = tf.get_variable("w_2", [self.lstm_size, self.lstm_size])
         self.v_attn = tf.get_variable("v", [self.lstm_size, 1])
 
-  """构建sampler，该函数同样也在controller.py中实现，但并未import"""
+  """构建sampler，该函数在controller.py中重载"""
   def _build_sampler(self):
     """Build the sampler ops and the log_prob ops."""
 
@@ -139,7 +175,7 @@ class GeneralController(Controller):
     log_probs = []
     skip_count = []
     skip_penaltys = []
-
+	#为LSTM的每一层初始化prev_c和prev_h为0向量，shape为[1,lstm_size]
     prev_c = [tf.zeros([1, self.lstm_size], tf.float32) for _ in
               xrange(self.lstm_num_layers)]
     prev_h = [tf.zeros([1, self.lstm_size], tf.float32) for _ in
@@ -147,15 +183,21 @@ class GeneralController(Controller):
     inputs = self.g_emb
     skip_targets = tf.constant([1.0 - self.skip_target, self.skip_target],
                                dtype=tf.float32)
+	#LSTM的网络运行过程
     for layer_id in xrange(self.num_layers):
       if self.search_whole_channels:
+		#前向传播，得到next_c,next_v
         next_c, next_h = stack_lstm(inputs, prev_c, prev_h, self.w_lstm)
         prev_c, prev_h = next_c, next_h
+		#计算softmax
         logit = tf.matmul(next_h[-1], self.w_soft)
+		#如果有需要，计算带temperature参数的softmax
         if self.temperature is not None:
           logit /= self.temperature
+		#将logit映射到[-tanh_constant,tanh_constant]范围内
         if self.tanh_constant is not None:
           logit = self.tanh_constant * tf.tanh(logit)
+		#branch的相关操作
         if self.search_for == "macro" or self.search_for == "branch":
           branch_id = tf.multinomial(logit, 1)
           branch_id = tf.to_int32(branch_id)
