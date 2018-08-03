@@ -12,7 +12,32 @@ from src.utils import get_train_ops
 from src.common_ops import stack_lstm
 
 from tensorflow.python.training import moving_averages
-
+"""
+#对于GeneralController参数的解释
+#
+#num_branches=6,                大概指的是六种操作，
+#num_layers=4,                  子模型网络的层数
+#num_blocks_per_branch=8,       
+#lstm_size=32,                  LSTM输入的维度
+#lstm_num_layers=2,             LSTM的层数            
+#lstm_keep_prob=1.0,            定义但未使用
+#tanh_constant=None,            使用tanh函数将变量映射到[-tanh_constant,tanh_constant]范围内
+#temperature=None,              softmax的temperature参数
+#lr_init=1e-3,                  尝试学习率
+#lr_dec_start=0,                学习率衰减的起点
+#lr_dec_every=100,              学习率衰减的频率
+#lr_dec_rate=0.9,               学习率衰减的比率
+#l2_reg=0,                      L2正则
+#clip_mode=None,                与tf.clip_by_global_norm函数相关
+#grad_bound=None,               梯度的限制范围
+#use_critic=False,              是否使用Actor-critic
+#bl_dec=0.999,                  baseline衰减系数
+#optim_algo="adam",             优化算法
+#sync_replicas=False,           是否有并行
+#num_aggregate=None,            并行训练参数
+#num_replicas=None,             并行数量
+#name="controller"              命名：controller
+"""
 class ConvController(Controller):
   def __init__(self,
                num_branches=6,
@@ -67,7 +92,7 @@ class ConvController(Controller):
     self._create_params()
     self._build_sampler()
 
-  """声明controller（LSTM）的参数"""
+  """创建controller（LSTM）的参数"""
   def _create_params(self):
     with tf.variable_scope(self.name):
       with tf.variable_scope("lstm"):
@@ -88,7 +113,7 @@ class ConvController(Controller):
                                             self.num_blocks_per_branch])
       with tf.variable_scope("critic"):
         self.w_critic = tf.get_variable("w", [self.lstm_size, 1])
-  """声明controller（LSTM）的参数"""
+  """创建controller（LSTM）的参数"""
   
   
   def _build_sampler(self):
