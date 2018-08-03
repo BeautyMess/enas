@@ -17,12 +17,12 @@ from tensorflow.python.training import moving_averages
 #
 #search_for="both",                  搜索方式，Micro或Macro
 #search_whole_channels=False,        未知
-#num_layers=4,                       未知
-#num_branches=6,                     未知
+#num_layers=4,                       子模型网络的层数
+#num_branches=6,                     
 #out_filters=48,                     卷积核数量，即feature map数量
 #lstm_size=32,                       LSTM输入的维度
 #lstm_num_layers=2,                  LSTM网络层数
-#lstm_keep_prob=1.0,                 未知
+#lstm_keep_prob=1.0,                 定义但未使用
 #tanh_constant=None,                 使用tanh函数将变量映射到[-tanh_constant,tanh_constant]范围内
 #temperature=None,                   softmax的temperature参数
 #lr_init=1e-3,                       初始学习率
@@ -33,14 +33,14 @@ from tensorflow.python.training import moving_averages
 #entropy_weight=None,                交叉熵权重
 #clip_mode=None,                     与tf.clip_by_global_norm函数相关
 #grad_bound=None,                    梯度的限制范围
-#use_critic=False,                   未知
-#bl_dec=0.999,                       未知
+#use_critic=False,                   是否使用Actor-critic
+#bl_dec=0.999,                       baseline衰减系数
 #optim_algo="adam",                  优化算法
 #sync_replicas=False,                是否有并行
-#num_aggregate=None,                 未知
+#num_aggregate=None,                 并行训练参数
 #num_replicas=None,                  并行数量
-#skip_target=0.8,                    未知
-#skip_weight=0.5,                    未知
+#skip_target=0.8,                    
+#skip_weight=0.5,                    
 #name="controller",                  命名：controller
 #*args,
 #**kwargs):
@@ -207,6 +207,7 @@ class GeneralController(Controller):
         else:
           raise ValueError("Unknown search_for {}".format(self.search_for))
         arc_seq.append(branch_id)
+		#计算交叉熵，label来自branch_id
         log_prob = tf.nn.sparse_softmax_cross_entropy_with_logits(
           logits=logit, labels=branch_id)
         log_probs.append(log_prob)
@@ -312,13 +313,16 @@ class GeneralController(Controller):
     skip_penaltys = tf.stack(skip_penaltys)
     self.skip_penaltys = tf.reduce_mean(skip_penaltys)
 
-  """构建trainer，该函数同样也在controller.py中实现，但并未import"""
+  """构建trainer，在controller.py中重载"""
   def build_trainer(self, child_model):
+	#
     child_model.build_valid_rl()
     self.valid_acc = (tf.to_float(child_model.valid_shuffle_acc) /
                       tf.to_float(child_model.batch_size))
+	#reward就使用子模型在验证集上的准确率
     self.reward = self.valid_acc
 
+	
     normalize = tf.to_float(self.num_layers * (self.num_layers - 1) / 2)
     self.skip_rate = tf.to_float(self.skip_count) / normalize
 
