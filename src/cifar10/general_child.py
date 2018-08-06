@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*
+#主要实现了子模型的生成，包含子模型的训练，子模型不同层功能的具体实现，数据的预处理，与controller的连接
 from __future__ import absolute_import
 from __future__ import division
 from __future__ import print_function
@@ -22,6 +23,41 @@ from src.utils import count_model_params
 from src.utils import get_train_ops
 from src.common_ops import create_weight
 
+"""
+#对于GeneralController参数的解释
+#
+#images,                         输入图像
+#labels,                         图像样本的标签
+#cutout_size=None,               cutout的size
+#whole_channels=False,           是否是whole_channel
+#fixed_arc=None,                 固定模型参数               
+#out_filters_scale=1,            未知
+#num_layers=2,                   子模型层数
+#num_branches=6,                 未知
+#out_filters=24,                 输出特征图通道
+#keep_prob=1.0,                  dropout参数
+#batch_size=32,                  batch size
+#clip_mode=None,                 与tf.clip_by_global_norm函数相关
+#grad_bound=None,                梯度的限制范围
+#l2_reg=1e-4,                    L2正则
+#lr_init=0.1,                    初始学习率
+#lr_dec_start=0,                 学习率衰减的起点
+#lr_dec_every=10000,             学习率衰减的频率
+#lr_dec_rate=0.1,                学习率衰减的比率
+#lr_cosine=False,                学习率相关
+#lr_max=None,                    学习率相关
+#lr_min=None,                    学习率相关
+#lr_T_0=None,                    学习率相关
+#lr_T_mul=None,                  学习率相关
+#optim_algo=None,                梯度优化算法
+#sync_replicas=False,            并行训练相关
+#num_aggregate=None,             未知
+#num_replicas=None,              并行数量
+#data_format="NHWC",             数据格式
+#name="child",                   命名为Child
+#args
+#**kwargs
+"""
 
 class GeneralChild(Model):
   def __init__(self,
@@ -57,8 +93,7 @@ class GeneralChild(Model):
                *args,
                **kwargs
               ):
-    """
-    """
+
 
     super(self.__class__, self).__init__(
       images,
@@ -131,7 +166,13 @@ class GeneralChild(Model):
       raise ValueError("Unknown data_format '{0}'".format(self.data_format))
 
 	  
-  """一种信息无损伤的1*1卷积结构，好像是为了实现skip层"""	  
+"""
+  pool_at层内部的Skip path 1和Skip path 2
+  如果stride=1,1*1卷积后返回，否则分为skip path 1 和skip path 2
+  两个path进行不同的操作，在最后聚合，然后BN
+  skip path 1，平均池化接1*1卷积
+  skip path 2，先padding，然后平均池化接1*1卷积
+"""	  
   def _factorized_reduction(self, x, out_filters, stride, is_training):         #out_filters为卷积核数，即卷积后的特征图数量
     """Reduces the shape of x without information loss due to striding."""
     assert out_filters % 2 == 0, (
@@ -182,7 +223,9 @@ class GeneralChild(Model):
 
     return final_path
 
- """好像是重复实现了"""
+ """
+  获取数据的通道
+"""
   def _get_C(self, x):
     """
     Args:
@@ -195,9 +238,11 @@ class GeneralChild(Model):
     else:
       raise ValueError("Unknown data_format '{0}'".format(self.data_format))
 
-	  
+"""
+  
+"""	  
   def _model(self, images, is_training, reuse=False):
-    with tf.variable_scope(self.name, reuse=reuse):
+    with tf.variable_scope(self.name, reuse=reuse):               #reuse：表示参数共享
       layers = []
 
       out_filters = self.out_filters
@@ -221,7 +266,7 @@ class GeneralChild(Model):
           if layer_id in self.pool_layers:
             if self.fixed_arc is not None:
               out_filters *= 2
-            with tf.variable_scope("pool_at_{0}".format(layer_id)):
+            with tf.variable_scope("pool_at_{0}".format(layer_id)):          #pool_at层的实现部分
               pooled_layers = []
               for i, layer in enumerate(layers):
                 with tf.variable_scope("from_{0}".format(i)):
@@ -374,7 +419,11 @@ class GeneralChild(Model):
         out = batch_norm(out, is_training, data_format=self.data_format)
 
     return out
-
+"""
+sample_arc为表示模型结构的序列数组
+start_idx为当前层在数组中，参数起始位置的数组下标
+在Macro方式中，self.sample_arc[start_idx]表示当前层进行的操作
+"""
   def _fixed_layer(
       self, layer_id, prev_layers, start_idx, out_filters, is_training):
     """
@@ -393,6 +442,7 @@ class GeneralChild(Model):
       elif self.data_format == "NCHW":
         inp_c = inputs.get_shape()[1].value
 
+#count=self.sample_arc[start_idx]表示当前层进行的操作
       count = self.sample_arc[start_idx]
       if count in [0, 1, 2, 3]:
         size = [3, 3, 5, 5]
@@ -480,6 +530,8 @@ class GeneralChild(Model):
         skip_start = start_idx + 1
       else:
         skip_start = start_idx + 2 * self.num_branches
+
+      #skip为每一层的skip参数数组，即每一层参数去除start_idx部分的内容
       skip = self.sample_arc[skip_start: skip_start + layer_id]
       total_skip_channels = np.sum(skip) + 1
 
@@ -719,7 +771,10 @@ class GeneralChild(Model):
     self.valid_shuffle_acc = tf.equal(valid_shuffle_preds, y_valid_shuffle)
     self.valid_shuffle_acc = tf.to_int32(self.valid_shuffle_acc)
     self.valid_shuffle_acc = tf.reduce_sum(self.valid_shuffle_acc)
-
+"""
+  子模型和控制器相连函数，如果要训练控制器，那么从控制器获得sample Architecture，否则使用fixed Architecture
+  fixed_arc、sample_arc为决定模型结构的序列
+"""
   def connect_controller(self, controller_model):
     if self.fixed_arc is None:
       self.sample_arc = controller_model.sample_arc
