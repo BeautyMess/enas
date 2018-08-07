@@ -31,7 +31,7 @@ from src.common_ops import create_weight
 #cutout_size=None,               cutout的size
 #whole_channels=False,           是否是whole_channel
 #fixed_arc=None,                 固定模型参数               
-#out_filters_scale=1,            未知
+#out_filters_scale=1,            
 #num_layers=2,                   子模型层数
 #num_branches=6,                 未知
 #out_filters=24,                 输出特征图通道
@@ -127,7 +127,9 @@ class GeneralChild(Model):
     self.num_branches = num_branches
     self.fixed_arc = fixed_arc
     self.out_filters_scale = out_filters_scale
-
+"""
+	在pool_layers数组里的层会作为pool_at层
+"""
     pool_distance = self.num_layers // 3
     self.pool_layers = [pool_distance - 1, 2 * pool_distance - 1]
 
@@ -239,15 +241,18 @@ class GeneralChild(Model):
       raise ValueError("Unknown data_format '{0}'".format(self.data_format))
 
 """
-  
+  子模型函数
 """	  
   def _model(self, images, is_training, reuse=False):
     with tf.variable_scope(self.name, reuse=reuse):               #reuse：表示参数共享
       layers = []
 
       out_filters = self.out_filters
+#     stem_conv：输入的预处理层
       with tf.variable_scope("stem_conv"):
-        w = create_weight("w", [3, 3, 3, out_filters])
+		inp_c = self._get_C(images)
+		w = create_weight("w", [3, 3, inp_c, out_filters])
+		#w = create_weight("w", [3, 3, 3, out_filters])
         x = tf.nn.conv2d(images, w, [1, 1, 1, 1], "SAME", data_format=self.data_format)
         x = batch_norm(x, is_training, data_format=self.data_format)
         layers.append(x)
@@ -256,6 +261,10 @@ class GeneralChild(Model):
         start_idx = 0
       else:
         start_idx = self.num_branches
+"""
+	 逐层构建子模型，主要函数是self._enas_layer(layer_id, layers, start_idx, out_filters, is_training)
+	 和self._fixed_layer(layer_id, layers, start_idx, out_filters, is_training)
+"""
       for layer_id in range(self.num_layers):
         with tf.variable_scope("layer_{0}".format(layer_id)):
           if self.fixed_arc is None:
@@ -263,6 +272,9 @@ class GeneralChild(Model):
           else:
             x = self._fixed_layer(layer_id, layers, start_idx, out_filters, is_training)
           layers.append(x)
+"""
+		  如果层属于pool_layers数组，设置它为pool_at层
+"""
           if layer_id in self.pool_layers:
             if self.fixed_arc is not None:
               out_filters *= 2
@@ -280,7 +292,7 @@ class GeneralChild(Model):
           start_idx += 2 * self.num_branches + layer_id
         print(layers[-1])
 
-      x = global_avg_pool(x, data_format=self.data_format)
+      x = global_avg_pool(x, data_format=self.data_format)                  #主要的操作是mean
       if is_training:
         x = tf.nn.dropout(x, self.keep_prob)
       with tf.variable_scope("fc"):
@@ -290,7 +302,8 @@ class GeneralChild(Model):
           inp_c = x.get_shape()[1].value
         else:
           raise ValueError("Unknown data_format {0}".format(self.data_format))
-        w = create_weight("w", [inp_c, 10])
+		#10代表10类，如果需要迁移到其他数据集，此处需要修改
+		w = create_weight("w", [inp_c, 10])
         x = tf.matmul(x, w)
     return x
 
