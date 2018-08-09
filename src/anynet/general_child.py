@@ -22,6 +22,8 @@ from src.anynet.image_ops import global_avg_pool
 from src.utils import count_model_params
 from src.utils import get_train_ops
 from src.common_ops import create_weight
+from src.common_ops import create_bias
+
 
 
 class GeneralChild(Model):
@@ -169,7 +171,9 @@ class GeneralChild(Model):
 			hidden_size=self.hidden_layer_size
 			with tf.variable_scope("input_layer"):
 				w = create_weight("w", [input_size, hidden_size])
-				x = tf.matmul(x, w)
+				b = create_bias("b",[1,hidden_size])
+				x = tf.matmul(x, w)+b
+				x = tf.nn.tanh(x)
 				layers.append(x)
 			print (layers[-1])
 				
@@ -181,17 +185,21 @@ class GeneralChild(Model):
 					if self.fixed_arc is None:
 						x = self._enas_layer(layer_id, layers, start_idx, out_filters, is_training)
 					else:
-						x = self._fixed_layer(layer_id, layers, start_idx, out_filters, is_training)
+						x = self._fixed_layer(layer_id, layers, start_idx, is_training)
 					layers.append(x)
 					
 					#have deleted the pool_at layer
 					
 				start_idx += 1 + layer_id
 				print(layers[-1])
-
+				
+			#in final code, it should be decide which layers will be connected to output_layer
 			with tf.variable_scope("output_layer"):
 				w = create_weight("w", [hidden_size, self.output_layer_size])
-				x = tf.matmul(x, w)
+				#x = tf.matmul(x, w)
+				b = create_bias("b",[1,self.output_layer_size])
+				x = tf.matmul(x, w)+b
+				x = tf.nn.tanh(x)
 			print (x)
 		
 		return x
@@ -209,7 +217,7 @@ class GeneralChild(Model):
 		out = []
 		return out
 
-	def _fixed_layer(self, layer_id, prev_layers, start_idx, flag_seq, is_training):
+	def _fixed_layer(self, layer_id, prev_layers, start_idx, is_training):
 		"""
 		Args:
 			layer_id: current layer
@@ -222,12 +230,13 @@ class GeneralChild(Model):
 		"""
 		input_list stroes layers that point to the current layer
 		"""
-		input_list[]
+		input_list=[]
 		for temp_layer_id in range(layer_id):
 			if arc_seq[temp_layer_id]== layer_id:
-				input_list.append(prev_layers[temp_layer_id]+1)   #because the input_layer has been added to prev_layers, the index of prev_layers should be added 1
+				input_list.append(prev_layers[temp_layer_id+1])   #because the input_layer has been added to prev_layers, the index of prev_layers should be added 1
 		if input_list:
-			inputs = input_list[-1]         #in final code, it should be replaced with average or other method to use all inputs
+			#inputs = input_list[-1]         #in final code, it should be replaced with average or other method to use all inputs
+			inputs=tf.reduce_mean(input_list,0)        #average all the input
 		else:
 			inputs=prev_layers[0]
 			
@@ -235,14 +244,24 @@ class GeneralChild(Model):
 		if self.whole_channels:
 		#just consider the default setting: whole_channels=true
 		"""
+		with tf.variable_scope("FC"):
+			w = create_weight("w", [self.hidden_layer_size, self.hidden_layer_size])
+			b = create_bias("b",[1,self.hidden_layer_size])
+			out = tf.matmul(inputs, w)+b
+			out = tf.nn.tanh(out)
+			#out = tf.matmul(inputs, w)
+		"""
 		count = self.sample_arc[start_idx]
 		if count ==0:
 			with tf.variable_scope("FC"):
 				w = create_weight("w", [self.hidden_layer_size, self.hidden_layer_size])
-				out = tf.matmul(inputs, w)
+				b = create_bias("b",[1,self.hidden_layer_size])
+				out = tf.matmul(inputs, w)+b
+				out = tf.nn.tanh(out)
+				#out = tf.matmul(inputs, w)
 		else:
 			raise ValueError("Unknown operation number '{0}'".format(count))
-		
+		"""
 		return out
 
 	# override
@@ -363,4 +382,3 @@ class GeneralChild(Model):
 		self._build_train()
 		self._build_valid()
 		self._build_test()
-
