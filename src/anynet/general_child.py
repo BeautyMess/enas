@@ -160,13 +160,8 @@ class GeneralChild(Model):
 			N=batch size
 			and change the array "images" into tensor "x"
 			"""
-			#print (np.shape(images))
 			w_or_h=np.shape(images)[2]
-			#print ("the height of image=",w_or_h)
-			#print (type(images))
 			x=tf.reshape(images,[-1,w_or_h*w_or_h])
-			#print (np.shape(x))
-			
 			input_size=w_or_h*w_or_h
 			hidden_size=self.hidden_layer_size
 			with tf.variable_scope("input_layer"):
@@ -178,19 +173,18 @@ class GeneralChild(Model):
 			print (layers[-1])
 				
 			#Just consider the default situation: whole_channels=True
-			start_idx = 0
+			
 			
 			for layer_id in range(self.num_layers):
 				with tf.variable_scope("hidden_layer_{0}".format(layer_id)):
 					if self.fixed_arc is None:
-						x = self._enas_layer(layer_id, layers, start_idx, out_filters, is_training)
+						x = self._enas_layer(layer_id, layers, is_training)
 					else:
-						x = self._fixed_layer(layer_id, layers, start_idx, is_training)
+						x = self._fixed_layer(layer_id, layers, is_training)
 					layers.append(x)
 					
 					#have deleted the pool_at layer
 					
-				start_idx += 1 + layer_id
 				print(layers[-1])
 				
 			#in final code, it should be decide which layers will be connected to output_layer
@@ -204,7 +198,7 @@ class GeneralChild(Model):
 		
 		return x
 
-	def _enas_layer(self, layer_id, prev_layers, start_idx, out_filters, is_training):
+	def _enas_layer(self, layer_id, prev_layers, is_training):
 		"""
 		Args:
 			layer_id: current layer
@@ -213,11 +207,66 @@ class GeneralChild(Model):
 				from layer_id, but why bother...
 			is_training: for batch_norm
 		"""
-		#have deleted the content of _enas_layer
-		out = []
+		#decide what the input is
+		"""
+		curr_idx: the position of this layer in prev_layers[]
+		because prev_layers[0] resprensents the input layer, curr_idx should be added 1
+		"""
+		curr_idx=layer_id+1
+		with tf.variable_scope("concat_input"):
+			input_list=[]
+			#meet the return requirement by using the function append_with_return()
+			def append_with_return(inp_list,temp_layer):
+				inp_list.append(temp_layer)
+				return 1
+			
+			def return_0():
+				return prev_layers[0]
+			
+			with tf.variable_scope("cond_1"):
+				for temp_layer_id in range(layer_id):
+				
+					tf.cond(tf.equal(self.sample_arc[temp_layer_id], layer_id),
+							lambda: append_with_return(input_list,prev_layers[temp_layer_id+1]),   #because prev_layers[0] resprensents the input layer, temp_layer_id should be added 1
+							lambda: 0           #do nothing
+							)
+			with tf.variable_scope("cond_2"):
+				print ("out1",prev_layers[0])
+				print ("out2",np.shape(input_list))
+				print ("out3",np.shape(tf.reduce_mean(input_list,0)))
+				tf.cond(tf.equal(len(input_list),0),
+							lambda: append_with_return(input_list,prev_layers[0]),
+							lambda: 0
+							)
+				inputs=tf.reduce_mean(input_list,0)
+				
+				print ("out4",np.shape(inputs))
+				print ("out5",inputs)
+				print ("out6",type(inputs))
+				print ("out7",np.shape(prev_layers[0]))
+			""""
+			for temp_layer_id in range(layer_id):
+				
+				tf.cond(tf.equal(self.sample_arc[temp_layer_id], layer_id),
+						lambda: append_with_return(input_list,prev_layers[temp_layer_id+1]),   #because prev_layers[0] resprensents the input layer, temp_layer_id should be added 1
+						lambda: 0           #do nothing
+						)
+			
+			
+			inputs=tf.cond(tf.equal(len(input_list),0),
+							lambda: prev_layers[0],
+							lambda: tf.reduce_mean(input_list,0)
+							)
+			inputs.set_shape([None, 500])
+			"""
+		with tf.variable_scope("FC"):
+			w = create_weight("w", [self.hidden_layer_size, self.hidden_layer_size])
+			b = create_bias("b",[1,self.hidden_layer_size])
+			out = tf.matmul(inputs, w)+b
+			out = tf.nn.tanh(out)
 		return out
 
-	def _fixed_layer(self, layer_id, prev_layers, start_idx, is_training):
+	def _fixed_layer(self, layer_id, prev_layers, is_training):
 		"""
 		Args:
 			layer_id: current layer
@@ -230,15 +279,16 @@ class GeneralChild(Model):
 		"""
 		input_list stroes layers that point to the current layer
 		"""
-		input_list=[]
-		for temp_layer_id in range(layer_id):
-			if arc_seq[temp_layer_id]== layer_id:
-				input_list.append(prev_layers[temp_layer_id+1])   #because the input_layer has been added to prev_layers, the index of prev_layers should be added 1
-		if input_list:
-			#inputs = input_list[-1]         #in final code, it should be replaced with average or other method to use all inputs
-			inputs=tf.reduce_mean(input_list,0)        #average all the input
-		else:
-			inputs=prev_layers[0]
+		with tf.variable_scope("concat_input"):
+			input_list=[]
+			for temp_layer_id in range(layer_id):
+				if arc_seq[temp_layer_id]== layer_id:
+					input_list.append(prev_layers[temp_layer_id+1])   #because the input_layer has been added to prev_layers, the index of prev_layers should be added 1
+			if input_list:
+				#inputs = input_list[-1]         #in final code, it should be replaced with average or other method to use all inputs
+				inputs=tf.reduce_mean(input_list,0)        #average all the input
+			else:
+				inputs=prev_layers[0]
 			
 		"""
 		if self.whole_channels:
@@ -339,7 +389,7 @@ class GeneralChild(Model):
 			if not shuffle and self.data_format == "NCHW":
 				self.images["valid_original"] = np.transpose(
 					self.images["valid_original"], [0, 3, 1, 2])
-				x_valid_shuffle, y_valid_shuffle = tf.train.shuffle_batch(
+			x_valid_shuffle, y_valid_shuffle = tf.train.shuffle_batch(
 					[self.images["valid_original"], self.labels["valid_original"]],
 					batch_size=self.batch_size,
 					capacity=25000,
@@ -350,17 +400,18 @@ class GeneralChild(Model):
 					allow_smaller_final_batch=True,
 					)
 
-	def _pre_process(x):
-		"""
-        x = tf.pad(x, [[4, 4], [4, 4], [0, 0]])
-        x = tf.random_crop(x, [32, 32, 3], seed=self.seed)
-        x = tf.image.random_flip_left_right(x, seed=self.seed)
-        if self.data_format == "NCHW":
-			x = tf.transpose(x, [2, 0, 1])
-			return x
-
-		if shuffle:
-			x_valid_shuffle = tf.map_fn(
+			def _pre_process(x):
+				inp_C=x.get_shape()[2]
+				w_or_h=x.get_shape()[0]
+				x = tf.pad(x, [[4, 4], [4, 4], [0, 0]])
+				x = tf.random_crop(x, [w_or_h, w_or_h, inp_C], seed=self.seed)
+				x = tf.image.random_flip_left_right(x, seed=self.seed)
+				if self.data_format == "NCHW":
+					x = tf.transpose(x, [2, 0, 1])
+				return x
+			
+			if shuffle:
+				x_valid_shuffle = tf.map_fn(
 				_pre_process, x_valid_shuffle, back_prop=False)
 
 		logits = self._model(x_valid_shuffle, False, reuse=True)
@@ -369,8 +420,7 @@ class GeneralChild(Model):
 		self.valid_shuffle_acc = tf.equal(valid_shuffle_preds, y_valid_shuffle)
 		self.valid_shuffle_acc = tf.to_int32(self.valid_shuffle_acc)
 		self.valid_shuffle_acc = tf.reduce_sum(self.valid_shuffle_acc)
-		"""
-		return x
+		
 
 	def connect_controller(self, controller_model):
 		if self.fixed_arc is None:
