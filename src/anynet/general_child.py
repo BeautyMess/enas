@@ -208,11 +208,6 @@ class GeneralChild(Model):
 			is_training: for batch_norm
 		"""
 		#decide what the input is
-		"""
-		curr_idx: the position of this layer in prev_layers[]
-		because prev_layers[0] resprensents the input layer, curr_idx should be added 1
-		"""
-		curr_idx=layer_id+1
 		with tf.variable_scope("concat_input"):
 			input_list=[]
 			#meet the return requirement by using the function append_with_return()
@@ -227,38 +222,16 @@ class GeneralChild(Model):
 				for temp_layer_id in range(layer_id):
 				
 					tf.cond(tf.equal(self.sample_arc[temp_layer_id], layer_id),
-							lambda: append_with_return(input_list,prev_layers[temp_layer_id+1]),   #because prev_layers[0] resprensents the input layer, temp_layer_id should be added 1
+							#because prev_layers[0] resprensents the input layer, temp_layer_id should be added
+							lambda: append_with_return(input_list,prev_layers[temp_layer_id+1]),    1
 							lambda: 0           #do nothing
 							)
 			with tf.variable_scope("cond_2"):
-				print ("out1",prev_layers[0])
-				print ("out2",np.shape(input_list))
-				print ("out3",np.shape(tf.reduce_mean(input_list,0)))
 				tf.cond(tf.equal(len(input_list),0),
 							lambda: append_with_return(input_list,prev_layers[0]),
 							lambda: 0
 							)
 				inputs=tf.reduce_mean(input_list,0)
-				
-				print ("out4",np.shape(inputs))
-				print ("out5",inputs)
-				print ("out6",type(inputs))
-				print ("out7",np.shape(prev_layers[0]))
-			""""
-			for temp_layer_id in range(layer_id):
-				
-				tf.cond(tf.equal(self.sample_arc[temp_layer_id], layer_id),
-						lambda: append_with_return(input_list,prev_layers[temp_layer_id+1]),   #because prev_layers[0] resprensents the input layer, temp_layer_id should be added 1
-						lambda: 0           #do nothing
-						)
-			
-			
-			inputs=tf.cond(tf.equal(len(input_list),0),
-							lambda: prev_layers[0],
-							lambda: tf.reduce_mean(input_list,0)
-							)
-			inputs.set_shape([None, 500])
-			"""
 		with tf.variable_scope("FC"):
 			w = create_weight("w", [self.hidden_layer_size, self.hidden_layer_size])
 			b = create_bias("b",[1,self.hidden_layer_size])
